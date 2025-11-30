@@ -1,0 +1,55 @@
+name: Jira Ticket Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check-jira-ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for Jira ticket reference
+        id: jira-check
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_BODY="${{ github.event.pull_request.body }}"
+          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+
+          # Pattern to match SL-### (your Jira project key)
+          JIRA_PATTERN="SL-[0-9]+"
+
+          echo "Checking PR title: $PR_TITLE"
+          echo "Checking branch name: $PR_BRANCH"
+          echo "Checking PR description..."
+
+          # Check if Jira ticket exists in title, branch, or description
+          if echo "$PR_TITLE" | grep -iEq "$JIRA_PATTERN"; then
+            echo "✅ Jira ticket found in PR title"
+            exit 0
+          elif echo "$PR_BRANCH" | grep -iEq "$JIRA_PATTERN"; then
+            echo "✅ Jira ticket found in branch name"
+            exit 0
+          elif echo "$PR_BODY" | grep -iEq "$JIRA_PATTERN"; then
+            echo "✅ Jira ticket found in PR description"
+            exit 0
+          else
+            echo "❌ No Jira ticket reference found"
+            echo ""
+            echo "Please include a Jira ticket reference (SL-###) in one of the following:"
+            echo "  • PR title (e.g., '[SL-123] Add new feature')"
+            echo "  • Branch name (e.g., 'feature/SL-123-add-feature')"
+            echo "  • PR description (e.g., 'Fixes SL-123' or link to Jira ticket)"
+            exit 1
+          fi
+
+      - name: Comment on PR if no ticket found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **Jira Ticket Required**\n\nThis PR does not have a linked Jira ticket. Please add a reference to an SL ticket in one of the following places:\n\n- **PR title**: `[SL-123] Your PR title`\n- **Branch name**: `feature/SL-123-description`\n- **PR description**: Include `SL-123` or a link to the Jira ticket\n\nThis check will automatically re-run when you update the PR.'
+            })
